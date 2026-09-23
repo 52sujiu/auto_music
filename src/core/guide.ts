@@ -44,23 +44,24 @@ export function buildGuideState(
     jianpuOf: (pitch: number, base: number) => string,
 ): GuideState {
     // 事件表里 key down/up 分开；按音键配对回音符，取时长
-    const pressed = new Map<string, number>();
+    const pressed = new Map<string, { t: number; note?: MappedNote }>();
     const out: GuideNote[] = [];
+    const ordered = notes.filter((note) => note.inRange)
+        .sort((a, b) => a.start - b.start || a.end - b.end);
+    let nextNote = 0;
 
     for (const e of events) {
         if (e.kind !== "key") continue;
         if (e.down) {
-            pressed.set(e.key, e.t);
+            pressed.set(e.key, { t: e.t, note: ordered[nextNote++] });
         } else {
-            const downT = pressed.get(e.key);
-            if (downT === undefined) continue;
+            const pair = pressed.get(e.key);
+            if (!pair) continue;
             pressed.delete(e.key);
-            const n = notes.find(
-                (x) => x.key === e.key && Math.abs(x.start - downT) < 0.35,
-            );
+            const n = pair.note;
             out.push({
-                t: downT,
-                dur: Math.max(0.05, e.t - downT),
+                t: pair.t,
+                dur: Math.max(0.05, e.t - pair.t),
                 key: e.key,
                 label: n ? jianpuOf(n.pitch, baseOctave) : "",
                 sharp: n?.sharp ?? false,

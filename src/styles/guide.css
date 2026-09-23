@@ -27,6 +27,30 @@
   cursor: grabbing;
 }
 
+.guide-head-end {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.guide-close {
+  width: 25px;
+  height: 25px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.guide-close:hover {
+  background: var(--red);
+  color: white;
+}
+
 .guide-song {
   font-size: 12px;
   font-weight: 600;
@@ -85,6 +109,24 @@
   display: block;
 }
 
+.guide-score {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  gap: 5px;
+  padding: 5px 6px;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--border);
+  font-size: 10px;
+  font-family: var(--mono);
+  white-space: nowrap;
+}
+
+.guide-score strong { color: var(--text); font-size: 13px; }
+.grade-perfect { color: var(--green); }
+.grade-great { color: var(--accent); }
+.grade-miss { color: var(--red); }
+
 /* 判定线下方的大字提示：现在该按什么 */
 .guide-hint {
   display: flex;
@@ -99,9 +141,12 @@
   transition: background 0.12s;
 }
 
-.guide-hint.show {
-  background: rgba(47, 129, 247, 0.16);
-}
+.guide-hint.grade-perfect { background: rgba(63, 185, 80, 0.18); }
+.guide-hint.grade-great { background: rgba(47, 129, 247, 0.18); }
+.guide-hint.grade-miss { background: rgba(248, 81, 73, 0.18); }
+
+.guide-result { font-size: 11px; font-weight: 800; }
+.guide-input-status { font-size: 9px; color: var(--text-faint); }
 
 .guide-hint-label {
   font-family: var(--mono);

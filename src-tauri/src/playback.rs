@@ -60,6 +60,11 @@ impl PlaybackState {
     pub fn set_hotkey_available(&self, available: bool) {
         self.1.store(available, Ordering::Relaxed);
     }
+
+    #[cfg(windows)]
+    pub fn is_running(&self) -> bool {
+        self.0.lock().map(|inner| inner.running).unwrap_or(false)
+    }
 }
 
 #[derive(Clone, Serialize)]

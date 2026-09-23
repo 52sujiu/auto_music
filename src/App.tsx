@@ -27,6 +27,7 @@ import {
 } from "./core/desktop-playback";
 import { isDesktop, saveTextFile } from "./core/save";
 import { installAvailableUpdate } from "./core/updater";
+import { installVhidDriver, vhidDriverStatus } from "./core/vhid-driver";
 import {
   LIBRARY,
   groupByComposer,
@@ -88,6 +89,31 @@ export default function App() {
   const [activeEntry, setActiveEntry] = useState<string | null>(null);
   const [libCollapsed, setLibCollapsed] = useState<Set<string>>(new Set());
   const [guideOn, setGuideOn] = useState(false);
+  const [driverReady, setDriverReady] = useState(false);
+  const [driverBundled, setDriverBundled] = useState(false);
+  const [driverBusy, setDriverBusy] = useState(false);
+  const [driverMessage, setDriverMessage] = useState("");
+
+  useEffect(() => {
+    if (!isDesktop() || !/Windows/i.test(navigator.userAgent)) return;
+    void vhidDriverStatus().then(({ ready, bundled }) => {
+      setDriverReady(ready);
+      setDriverBundled(bundled);
+    }).catch((error) => setDriverMessage(`驱动状态检查失败：${String(error)}`));
+  }, []);
+
+  useEffect(() => {
+    if (!isDesktop()) return;
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void import("@tauri-apps/api/event").then(({ listen }) =>
+      listen("guide:closed", () => setGuideOn(false)),
+    ).then((release) => {
+      if (disposed) release();
+      else unlisten = release;
+    });
+    return () => { disposed = true; unlisten?.(); };
+  }, []);
 
   const logRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<AudioContext | null>(null);
@@ -401,6 +427,30 @@ export default function App() {
       setAutoState("error");
       setAutoMessage(`自动演奏启动失败：${String(error)}`);
       appendLog("err", `自动演奏启动失败：${String(error)}`);
+    }
+  };
+
+  const doInstallDriver = async () => {
+    if (driverBusy || autoBusy) return;
+    setDriverBusy(true);
+    setDriverMessage(driverBundled ? "正在请求管理员权限并安装驱动…" : "请选择完整的已签名驱动包…");
+    try {
+      const message = await installVhidDriver(driverBundled);
+      if (message === null) {
+        setDriverMessage("已取消选择驱动包");
+        return;
+      }
+      setDriverMessage(message);
+      appendLog("ok", message);
+      const status = await vhidDriverStatus();
+      setDriverReady(status.ready);
+      setDriverBundled(status.bundled);
+    } catch (error) {
+      const message = `驱动安装失败：${String(error)}`;
+      setDriverMessage(message);
+      appendLog("err", message);
+    } finally {
+      setDriverBusy(false);
     }
   };
 
@@ -846,10 +896,26 @@ export default function App() {
                 <select className="select" id="playback-backend" value={playbackBackend}
                   onChange={(event) => setPlaybackBackend(event.target.value as PlaybackBackend)}
                   disabled={autoBusy}>
-                  <option value="virtual-hid">虚拟 HID（需安装驱动）</option>
+                  <option value="virtual-hid">虚拟 HID</option>
                   <option value="system">系统模拟输入</option>
                 </select>
               </div>
+            )}
+            {/Windows/i.test(navigator.userAgent) && playbackBackend === "virtual-hid" && (
+              <>
+                <div className="btn-row">
+                  <span className="track-meta">驱动：{driverReady ? "已就绪" : "未就绪"}</span>
+                  <button className="btn" onClick={() => void doInstallDriver()}
+                    disabled={!isDesktop() || driverBusy || autoBusy || driverReady}>
+                    {driverBusy ? "安装中…" : driverBundled ? "一键安装驱动" : "选择并安装驱动包…"}
+                  </button>
+                </div>
+                <div className="track-meta" style={{ lineHeight: 1.5 }}>
+                  {driverMessage || (driverBundled
+                    ? "安装时 Windows 会请求一次管理员授权。"
+                    : "当前安装包未附带签名驱动；请选择包含 INF、SYS、CAT 的已签名驱动包。")}
+                </div>
+              </>
             )}
             <div className="btn-row">
               <button
@@ -868,7 +934,7 @@ export default function App() {
               </button>
             </div>
             <div className="track-meta" style={{ paddingLeft: 2, lineHeight: 1.6 }}>
-              {autoMessage || "桌面版可用。开始后有 5 秒切换目标窗口；可用时按 F8 停止。Windows 虚拟 HID 需先安装驱动。"}
+              {autoMessage || "桌面版可用。开始后有 5 秒切换目标窗口；可用时按 F8 停止。"}
             </div>
           </div>
 

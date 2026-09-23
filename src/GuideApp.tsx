@@ -5,6 +5,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { guideColor, keyLabel, readGuide, type GuideState } from "./core/guide";
+import { GuideJudge, type GuideGrade, type GuideInput, type GuideJudgement, type GuideScore } from "./core/guide-judge";
 import { Slot } from "./core/mapping";
 
 /** 8 条轨道：Z X C V B N M + 逗号（最高音 do）。 */
@@ -38,12 +39,70 @@ export default function GuideApp() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const startRef = useRef(0);
   const rafRef = useRef(0);
-  const lastKeyRef = useRef<string>("");
-  const [hit, setHit] = useState<string | null>(null);
+  const stateRef = useRef<GuideState | null>(null);
+  const speedRef = useRef(1);
+  const playingRef = useRef(false);
+  const judgeRef = useRef<GuideJudge | null>(null);
+  const feedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mouseRef = useRef({ left: false, right: false, middle: false });
+  const nativeReadyRef = useRef(false);
+  const [score, setScore] = useState<GuideScore>(() => new GuideJudge([], 1).snapshot());
+  const [feedback, setFeedback] = useState<{ grade: GuideGrade; deltaMs: number } | null>(null);
+  const [judgeRevision, setJudgeRevision] = useState(0);
+  const [inputStatus, setInputStatus] = useState("");
+
+  const acceptState = (next: GuideState | null) => {
+    stateRef.current = next;
+    setState(next);
+    judgeRef.current = next ? new GuideJudge(next.notes, speedRef.current) : null;
+    setScore(judgeRef.current?.snapshot() ?? new GuideJudge([], 1).snapshot());
+    setJudgeRevision((value) => value + 1);
+    setFeedback(null);
+  };
+
+  const beginPractice = (nextSpeed: number) => {
+    const actualSpeed = Math.max(0.1, nextSpeed || 1);
+    speedRef.current = actualSpeed;
+    judgeRef.current = new GuideJudge(stateRef.current?.notes ?? [], actualSpeed);
+    setScore(judgeRef.current.snapshot());
+    setJudgeRevision((value) => value + 1);
+    setFeedback(null);
+    startRef.current = performance.now();
+    setSpeedState(actualSpeed);
+    setT(0);
+    playingRef.current = true;
+    setPlaying(true);
+  };
+
+  const stopPractice = () => {
+    playingRef.current = false;
+    setPlaying(false);
+    setT(0);
+  };
+
+  const showJudgements = (items: GuideJudgement[]) => {
+    if (items.length === 0 || !judgeRef.current) return;
+    setScore(judgeRef.current.snapshot());
+    setJudgeRevision((value) => value + 1);
+    const last = items[items.length - 1];
+    setFeedback({ grade: last.grade, deltaMs: last.deltaMs });
+    if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
+    feedbackTimerRef.current = setTimeout(() => setFeedback(null), 650);
+  };
+
+  const processInput = (input: GuideInput) => {
+    if (!playingRef.current || !judgeRef.current) return;
+    const time = ((performance.now() - startRef.current) / 1000) * speedRef.current;
+    const expired = judgeRef.current.expire(time);
+    const result = judgeRef.current.press(input, time);
+    showJudgements(result ? [...expired, result] : expired);
+  };
+  const inputHandlerRef = useRef(processInput);
+  inputHandlerRef.current = processInput;
 
   // ---------- 接收主窗状态 ----------
   useEffect(() => {
-    const load = () => setState(readGuide());
+    const load = () => acceptState(readGuide());
     load();
     window.addEventListener("storage", load);
     return () => window.removeEventListener("storage", load);
@@ -61,7 +120,7 @@ export default function GuideApp() {
       unlistens.push(
         await listen<GuideState>("guide:state", (e) => {
           if (e.payload && Array.isArray(e.payload.notes)) {
-            setState(e.payload);
+            acceptState(e.payload);
           }
         }),
       );
@@ -75,13 +134,9 @@ export default function GuideApp() {
                 "auto-music:guide-speed",
                 String(e.payload.speed || 1),
               );
-              startRef.current = performance.now();
-              setSpeedState(e.payload.speed || 1);
-              setT(0);
-              setPlaying(true);
+              beginPractice(e.payload.speed || 1);
             } else {
-              setPlaying(false);
-              setT(0);
+              stopPractice();
             }
           },
         ),
@@ -104,10 +159,7 @@ export default function GuideApp() {
     if (!state) return;
     const s =
       Number(localStorage.getItem("auto-music:guide-speed") ?? "1") || 1;
-    setSpeedState(s);
-    startRef.current = performance.now();
-    setT(0);
-    setPlaying(true);
+    beginPractice(s);
   };
 
   const speed = speedState;
@@ -118,7 +170,9 @@ export default function GuideApp() {
     const tick = () => {
       const elapsed = ((performance.now() - startRef.current) / 1000) * speed;
       setT(elapsed);
+      if (judgeRef.current) showJudgements(judgeRef.current.expire(elapsed));
       if (state && elapsed > state.duration + 1) {
+        playingRef.current = false;
         setPlaying(false);
         return;
       }
@@ -140,17 +194,67 @@ export default function GuideApp() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape" && through) setThrough(false);
+      if (nativeReadyRef.current || e.repeat) return;
+      const key = e.key === "," ? "," : e.key.toUpperCase();
+      if (!LANES.includes(key as typeof LANES[number])) return;
+      inputHandlerRef.current({ key, ...mouseRef.current });
+    };
+    const onMouseDown = (e: MouseEvent) => {
+      if (e.button === 0) mouseRef.current.left = true;
+      if (e.button === 1) mouseRef.current.middle = true;
+      if (e.button === 2) mouseRef.current.right = true;
+    };
+    const onMouseUp = (e: MouseEvent) => {
+      if (e.button === 0) mouseRef.current.left = false;
+      if (e.button === 1) mouseRef.current.middle = false;
+      if (e.button === 2) mouseRef.current.right = false;
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("mousedown", onMouseDown);
+    window.addEventListener("mouseup", onMouseUp);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("mousedown", onMouseDown);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
   }, [through]);
+
+  // Windows 原生轮询在其他窗口获得焦点时仍能收到玩家按键。
+  useEffect(() => {
+    if (!("__TAURI_INTERNALS__" in window) || !/Windows/i.test(navigator.userAgent)) {
+      setInputStatus("仅在引导窗聚焦时计分");
+      return;
+    }
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    (async () => {
+      const [{ listen }, { invoke }] = await Promise.all([
+        import("@tauri-apps/api/event"),
+        import("@tauri-apps/api/core"),
+      ]);
+      const release = await listen<GuideInput>("guide:input", (event) => {
+        inputHandlerRef.current(event.payload);
+      });
+      if (disposed) { release(); return; }
+      unlisten = release;
+      await invoke("start_guide_input");
+      nativeReadyRef.current = true;
+      setInputStatus("正在全局监听按键");
+    })().catch((error) => setInputStatus(`全局监听失败，仅本窗可计分：${String(error)}`));
+    return () => {
+      disposed = true;
+      unlisten?.();
+      if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
+    };
+  }, []);
 
   // ---------- 判定线上的当前音符 ----------
   const current = useMemo(() => {
     if (!state) return null;
     let best: GuideState["notes"][number] | null = null;
     let bestDelta = Infinity;
-    for (const n of state.notes) {
+    for (const [index, n] of state.notes.entries()) {
+      if (judgeRef.current?.isJudged(index)) continue;
       const delta = n.t - t;
       if (delta < -0.35) continue;
       if (Math.abs(delta) < Math.abs(bestDelta)) {
@@ -160,19 +264,7 @@ export default function GuideApp() {
       if (delta > 5) break;
     }
     return best;
-  }, [state, t]);
-
-  // 命中反馈：当前音符换人时闪一下大字
-  useEffect(() => {
-    if (!current) return;
-    const id = `${current.t}:${current.key}`;
-    if (id !== lastKeyRef.current) {
-      lastKeyRef.current = id;
-      setHit(id);
-      const timer = setTimeout(() => setHit(null), 450);
-      return () => clearTimeout(timer);
-    }
-  }, [current]);
+  }, [state, t, judgeRevision]);
 
   // ---------- 绘制下落轨道（8 轨，节奏大师式） ----------
   useEffect(() => {
@@ -221,7 +313,7 @@ export default function GuideApp() {
         // 判定线上下各显示多少秒
         const showFuture = judgeY / pxPerSec + 0.2;
         const showPast = (h - judgeY) / pxPerSec + 0.9;
-        for (const n of state.notes) {
+        for (const [index, n] of state.notes.entries()) {
           const li = laneOf(n.key);
           if (li < 0) continue;
           const delta = n.t - t;
@@ -235,7 +327,7 @@ export default function GuideApp() {
           const near = Math.abs(delta) < 0.3;
           const past = delta < -0.15;
 
-          ctx.globalAlpha = past ? 0.32 : 1;
+          ctx.globalAlpha = judgeRef.current?.isJudged(index) ? 0.18 : past ? 0.32 : 1;
           ctx.fillStyle = guideColor(n);
           // 发光：快到判定线的加一圈
           if (near && !past) {
@@ -306,11 +398,27 @@ export default function GuideApp() {
     redraw();
     window.addEventListener("resize", redraw);
     return () => window.removeEventListener("resize", redraw);
-  }, [state, t, pxPerSec, current]);
+  }, [state, t, pxPerSec, current, judgeRevision]);
+
+  const closeGuide = async () => {
+    stopPractice();
+    if (!("__TAURI_INTERNALS__" in window)) {
+      window.close();
+      return;
+    }
+    const { getCurrentWindow } = await import("@tauri-apps/api/window");
+    const guide = getCurrentWindow();
+    await guide.setIgnoreCursorEvents(false);
+    await guide.close();
+  };
 
   if (!state) {
     return (
       <div className="guide-root">
+        <div className="guide-head" data-tauri-drag-region>
+          <span className="guide-song">引导练习</span>
+          <button className="guide-close" aria-label="关闭引导窗" title="关闭引导窗" onClick={() => void closeGuide()}>×</button>
+        </div>
         <div className="guide-empty">
           等待主窗载入曲目…
           <br />
@@ -324,15 +432,16 @@ export default function GuideApp() {
     <div className="guide-root">
       <div className="guide-head" data-tauri-drag-region>
         <span className="guide-song">{state.songName || "未命名"}</span>
-        <span className="guide-time">
-          {t.toFixed(1)}s / {state.duration.toFixed(0)}s
-        </span>
+        <div className="guide-head-end">
+          <span className="guide-time">{t.toFixed(1)}s / {state.duration.toFixed(0)}s</span>
+          <button className="guide-close" aria-label="关闭引导窗" title="关闭引导窗" onClick={() => void closeGuide()}>×</button>
+        </div>
       </div>
 
       <div className="guide-tools">
         <button
           className="btn btn-xs"
-          onClick={() => (playing ? (setPlaying(false), setT(0)) : localPreview())}
+          onClick={() => (playing ? stopPractice() : localPreview())}
           title="不经主窗、直接在本窗试看下落是否正常"
         >
           {playing ? "⏸" : "▶试播"}
@@ -357,9 +466,20 @@ export default function GuideApp() {
         </button>
       </div>
 
+      <div className="guide-score" aria-live="polite">
+        <strong>{score.score} 分</strong>
+        <span>{score.combo} 连击</span>
+        <span className="grade-perfect">Perfect {score.perfect}</span>
+        <span className="grade-great">Great {score.great}</span>
+        <span className="grade-miss">Miss {score.miss}</span>
+      </div>
+
       <canvas ref={canvasRef} className="guide-canvas" />
 
-      <div className={`guide-hint${hit ? " show" : ""}`}>
+      <div className={`guide-hint${feedback ? ` grade-${feedback.grade}` : ""}`}>
+        {feedback && <span className={`guide-result grade-${feedback.grade}`}>
+          {feedback.grade.toUpperCase()} {feedback.grade === "miss" ? "−50" : feedback.grade === "great" ? "+50" : "+100"}
+        </span>}
         {current ? (
           <>
             <span className="guide-hint-label">{keyLabel(current)}</span>
@@ -373,6 +493,7 @@ export default function GuideApp() {
         ) : (
           <span className="guide-hint-sub">{playing ? "…" : "未开始"}</span>
         )}
+        <span className="guide-input-status">{inputStatus}</span>
       </div>
     </div>
   );

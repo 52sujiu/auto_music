@@ -4,7 +4,13 @@ use std::fs;
 use tauri::Manager;
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Shortcut, ShortcutState};
 
+mod driver_install;
+mod guide_input;
 mod playback;
+
+pub fn driver_install_helper() {
+    driver_install::run_elevated_helper();
+}
 
 /// 把文本写到用户选定的路径。返回真正写入的路径。
 ///
@@ -27,6 +33,16 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .manage(playback::PlaybackState::default())
+        .manage(guide_input::GuideInputState::default())
+        .on_window_event(|window, event| {
+            if window.label() == "guide" && matches!(event, tauri::WindowEvent::Destroyed) {
+                window
+                    .app_handle()
+                    .state::<guide_input::GuideInputState>()
+                    .stop();
+                let _ = tauri::Emitter::emit(window.app_handle(), "guide:closed", ());
+            }
+        })
         .setup(|app| {
             let stop_shortcut = Shortcut::new(None, Code::F8);
             app.handle().plugin(
@@ -49,7 +65,11 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             save_text_file,
             playback::start_playback,
-            playback::stop_playback
+            playback::stop_playback,
+            guide_input::start_guide_input,
+            driver_install::vhid_driver_status,
+            driver_install::vhid_driver_package_available,
+            driver_install::install_vhid_driver
         ])
         .run(tauri::generate_context!())
         .expect("启动 Tauri 应用失败");
