@@ -1,0 +1,23 @@
+[package]
+name = "auto-music"
+version = "0.1.0"
+description = "Auto Music 口琴谱面工坊"
+authors = ["you"]
+edition = "2021"
+
+[lib]
+name = "auto_music_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+enigo = "0.6.1"
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-updater = "2.11.0"
+tauri-plugin-process = "2.3.1"

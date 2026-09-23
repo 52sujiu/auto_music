@@ -1,0 +1,12 @@
+node_modules/
+dist/
+src-tauri/target/
+src-tauri/gen/
+app-icon.png
+.secrets/
+src-tauri/tauri.release.conf.json
+.idea/
+.pi-glla/
+.pi-lens-ignore
+银河与星斗_爱给网_aigei_com.mid
+.DS_Store

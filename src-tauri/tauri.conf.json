@@ -1,0 +1,61 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Auto Music",
+  "version": "0.1.0",
+  "identifier": "com.automusic.player",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:5273",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Auto Music · 口琴谱面工坊",
+        "width": 1280,
+        "height": 820,
+        "minWidth": 900,
+        "minHeight": 600,
+        "resizable": true,
+        "center": true
+      },
+      {
+        "label": "guide",
+        "title": "引导练习",
+        "url": "index.html?window=guide",
+        "width": 400,
+        "height": 640,
+        "minWidth": 300,
+        "minHeight": 420,
+        "resizable": true,
+        "alwaysOnTop": true,
+        "decorations": false,
+        "transparent": true,
+        "visible": false,
+        "skipTaskbar": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDU3ODhBRjE3Qjk0ODFENTIKUldSU0hVaTVGNitJVjV4WUZ1VlYxbVFQNFpxWjRGNTJWOTVjY1JEcU9zN3JVY2VOaE9TZmRFWGsK",
+      "endpoints": []
+    }
+  }
+}
