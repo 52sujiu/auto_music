@@ -65,3 +65,17 @@ jobs:
           args: --bundles nsis --config src-tauri/tauri.release.conf.json
           uploadUpdaterJson: true
           updaterJsonPreferNsis: true
+      - name: Make updater downloads public
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $manifestDir = Join-Path $env:RUNNER_TEMP 'auto-music-updater'
+          New-Item -ItemType Directory -Path $manifestDir -Force | Out-Null
+          gh release download $env:GITHUB_REF_NAME --pattern latest.json --dir $manifestDir
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $manifestPath = Join-Path $manifestDir 'latest.json'
+          node scripts/rewrite-updater-manifest.mjs $manifestPath
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          gh release upload $env:GITHUB_REF_NAME $manifestPath --clobber
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
