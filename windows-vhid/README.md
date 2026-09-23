@@ -1,4 +1,6 @@
-# Windows 虚拟 HID 原型
+# 旧版 Windows 虚拟 HID 原型（不参与当前发布）
+
+当前发布版已经改用 libvirtualhid。此目录仅保留早期实验代码，以下步骤不适用于当前安装包；使用说明见仓库根目录 README。
 
 这个目录提供一份 KMDF/VHF 源驱动。Windows 版 Auto Music 默认选「虚拟 HID」，播放端把谱面事件编码成键盘和鼠标 HID 输入报告，写入 `\\.\AutoMusicVhid`；驱动再调用 `VhfReadReportSubmit`。鼠标可用普通鼠标，原有物理键鼠无需替换。
 

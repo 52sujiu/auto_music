@@ -1,134 +1,118 @@
-//! Shared wire format for the Windows VHF source driver.
-//! Reports include their report ID as byte zero.
+//! Adapter for libvirtualhid's public C++ API through a bundled bridge.
 
+#[cfg(windows)]
 use super::HeldInput;
+#[cfg(windows)]
 use enigo::Button;
-use std::collections::BTreeSet;
+#[cfg(windows)]
+use std::{
+    io::{BufRead, BufReader, Write},
+    process::{Child, ChildStdin, ChildStdout, Command, Stdio},
+};
+#[cfg(windows)]
+use tauri::{AppHandle, Manager};
 
-const KEYBOARD_ID: u8 = 1;
-const MOUSE_ID: u8 = 2;
-
-#[derive(Clone, Default)]
-struct ReportState {
-    keys: BTreeSet<u8>,
-    buttons: u8,
+#[cfg(windows)]
+fn bridge_path(app: &AppHandle) -> Result<std::path::PathBuf, String> {
+    let path = app
+        .path()
+        .resource_dir()
+        .map_err(|error| format!("无法定位应用资源：{error}"))?
+        .join("driver")
+        .join("auto-music-lvh-bridge.exe");
+    if !path.is_file() {
+        return Err("缺少 libvirtualhid 桥接程序；请重新安装 Auto Music".into());
+    }
+    Ok(path)
 }
 
-impl ReportState {
-    fn update(&mut self, input: HeldInput, down: bool) -> Result<Vec<u8>, String> {
-        match input {
-            HeldInput::Key(key) => {
-                let usage = match key {
-                    'z' => 0x1d,
-                    'x' => 0x1b,
-                    'c' => 0x06,
-                    'v' => 0x19,
-                    'b' => 0x05,
-                    'n' => 0x11,
-                    'm' => 0x10,
-                    ',' => 0x36,
-                    _ => return Err(format!("没有 HID 用法码：{key}")),
-                };
-                if down {
-                    self.keys.insert(usage);
-                } else {
-                    self.keys.remove(&usage);
-                }
-                if self.keys.len() > 6 {
-                    return Err("虚拟键盘最多同时按住 6 个音键".into());
-                }
-                let mut report = vec![KEYBOARD_ID, 0, 0, 0, 0, 0, 0, 0, 0];
-                for (slot, usage) in self.keys.iter().enumerate() {
-                    report[3 + slot] = *usage;
-                }
-                Ok(report)
-            }
-            HeldInput::Mouse(button) => {
-                let mask = match button {
-                    Button::Left => 1,
-                    Button::Right => 2,
-                    Button::Middle => 4,
-                    _ => return Err("虚拟鼠标仅支持左、右、中键".into()),
-                };
-                if down {
-                    self.buttons |= mask;
-                } else {
-                    self.buttons &= !mask;
-                }
-                Ok(vec![MOUSE_ID, self.buttons, 0, 0, 0])
-            }
-        }
+#[cfg(windows)]
+fn bridge_response(line: &str) -> Result<(), String> {
+    let line = line.trim();
+    if line == "READY" || line == "OK" {
+        Ok(())
+    } else if let Some(message) = line.strip_prefix("ERR ") {
+        Err(format!("libvirtualhid：{message}"))
+    } else {
+        Err(format!("libvirtualhid 桥接程序返回异常：{line}"))
     }
+}
+
+#[cfg(windows)]
+pub fn probe(app: &AppHandle) -> Result<(), String> {
+    let output = Command::new(bridge_path(app)?)
+        .arg("--probe")
+        .output()
+        .map_err(|error| format!("无法启动 libvirtualhid 桥接程序：{error}"))?;
+    let message = String::from_utf8_lossy(&output.stdout);
+    bridge_response(message.lines().next().unwrap_or(""))?;
+    if !output.status.success() {
+        return Err("libvirtualhid 驱动检查失败".into());
+    }
+    Ok(())
 }
 
 #[cfg(windows)]
 pub struct VhidOutput {
-    file: std::fs::File,
-    state: ReportState,
+    child: Child,
+    stdin: ChildStdin,
+    stdout: BufReader<ChildStdout>,
 }
 
 #[cfg(windows)]
 impl VhidOutput {
-    pub fn open() -> Result<Self, String> {
-        let file = std::fs::OpenOptions::new()
-            .write(true)
-            .open(r"\\.\AutoMusicVhid")
-            .map_err(|error| format!("无法打开虚拟 HID 驱动（请先安装并启动驱动）：{error}"))?;
-        Ok(Self {
-            file,
-            state: ReportState::default(),
-        })
+    pub fn open(app: &AppHandle) -> Result<Self, String> {
+        let mut child = Command::new(bridge_path(app)?)
+            .arg("--play")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(|error| format!("无法启动 libvirtualhid 桥接程序：{error}"))?;
+        let stdin = child.stdin.take().ok_or("桥接程序没有输入通道")?;
+        let stdout = child.stdout.take().ok_or("桥接程序没有输出通道")?;
+        let mut output = Self {
+            child,
+            stdin,
+            stdout: BufReader::new(stdout),
+        };
+        output.read_response()?;
+        Ok(output)
+    }
+
+    fn read_response(&mut self) -> Result<(), String> {
+        let mut line = String::new();
+        self.stdout
+            .read_line(&mut line)
+            .map_err(|error| format!("读取 libvirtualhid 响应失败：{error}"))?;
+        bridge_response(&line)
     }
 
     pub fn send(&mut self, input: HeldInput, down: bool) -> Result<(), String> {
-        use std::io::Write;
-        let mut next = self.state.clone();
-        let report = next.update(input, down)?;
-        self.file
-            .write_all(&report)
-            .map_err(|error| format!("发送虚拟 HID 报告失败：{error}"))?;
-        self.state = next;
-        Ok(())
+        let command = match input {
+            HeldInput::Key(key) => format!("K {key} {}\n", u8::from(down)),
+            HeldInput::Mouse(button) => {
+                let button = match button {
+                    Button::Left => 'L',
+                    Button::Right => 'R',
+                    Button::Middle => 'M',
+                    _ => return Err("虚拟鼠标仅支持左、右、中键".into()),
+                };
+                format!("M {button} {}\n", u8::from(down))
+            }
+        };
+        self.stdin
+            .write_all(command.as_bytes())
+            .and_then(|_| self.stdin.flush())
+            .map_err(|error| format!("发送 libvirtualhid 输入失败：{error}"))?;
+        self.read_response()
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn keyboard_report_has_id_and_six_key_slots() {
-        let mut state = ReportState::default();
-        assert_eq!(
-            state.update(HeldInput::Key('z'), true).unwrap(),
-            [1, 0, 0, 0x1d, 0, 0, 0, 0, 0]
-        );
-        assert_eq!(
-            state.update(HeldInput::Key('x'), true).unwrap(),
-            [1, 0, 0, 0x1b, 0x1d, 0, 0, 0, 0]
-        );
-        assert_eq!(
-            state.update(HeldInput::Key('z'), false).unwrap(),
-            [1, 0, 0, 0x1b, 0, 0, 0, 0, 0]
-        );
-    }
-
-    #[test]
-    fn mouse_report_preserves_other_buttons() {
-        let mut state = ReportState::default();
-        assert_eq!(
-            state.update(HeldInput::Mouse(Button::Left), true).unwrap(),
-            [2, 1, 0, 0, 0]
-        );
-        assert_eq!(
-            state
-                .update(HeldInput::Mouse(Button::Middle), true)
-                .unwrap(),
-            [2, 5, 0, 0, 0]
-        );
-        assert_eq!(
-            state.update(HeldInput::Mouse(Button::Left), false).unwrap(),
-            [2, 4, 0, 0, 0]
-        );
+#[cfg(windows)]
+impl Drop for VhidOutput {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
     }
 }

@@ -8,10 +8,6 @@ mod driver_install;
 mod guide_input;
 mod playback;
 
-pub fn driver_install_helper() {
-    driver_install::run_elevated_helper();
-}
-
 /// 把文本写到用户选定的路径。返回真正写入的路径。
 ///
 /// 前端先弹保存对话框拿到路径，再把内容送进来 —— 内容是文本（Lua / CSV），
@@ -68,8 +64,7 @@ pub fn run() {
             playback::stop_playback,
             guide_input::start_guide_input,
             driver_install::vhid_driver_status,
-            driver_install::vhid_driver_package_available,
-            driver_install::install_vhid_driver
+            driver_install::download_vhid_driver
         ])
         .run(tauri::generate_context!())
         .expect("启动 Tauri 应用失败");

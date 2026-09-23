@@ -1,5 +1,6 @@
-Place the Microsoft-signed AutoMusicVhid.inf, AutoMusicVhid.sys and
-AutoMusicVhid.cat here before building a release. The installer button will
-then use the bundled package and request administrator approval once.
+The Windows build bundles auto-music-lvh-bridge.exe here. It is built from
+Auto Music's adapter and the MIT-licensed libvirtualhid C++ client library.
 
-The source INF in windows-vhid/driver is not a signed install package.
+The libvirtualhid driver MSI is not bundled. The application opens the official
+LizardByte release download. Driver installation and activation are handled by
+LizardByte's own installer and license flow.

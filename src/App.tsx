@@ -27,7 +27,7 @@ import {
 } from "./core/desktop-playback";
 import { isDesktop, saveTextFile } from "./core/save";
 import { installAvailableUpdate } from "./core/updater";
-import { installVhidDriver, vhidDriverStatus } from "./core/vhid-driver";
+import { downloadVhidDriver, vhidDriverStatus } from "./core/vhid-driver";
 import {
   LIBRARY,
   groupByComposer,
@@ -90,15 +90,14 @@ export default function App() {
   const [libCollapsed, setLibCollapsed] = useState<Set<string>>(new Set());
   const [guideOn, setGuideOn] = useState(false);
   const [driverReady, setDriverReady] = useState(false);
-  const [driverBundled, setDriverBundled] = useState(false);
   const [driverBusy, setDriverBusy] = useState(false);
   const [driverMessage, setDriverMessage] = useState("");
 
   useEffect(() => {
     if (!isDesktop() || !/Windows/i.test(navigator.userAgent)) return;
-    void vhidDriverStatus().then(({ ready, bundled }) => {
+    void vhidDriverStatus().then(({ ready, message }) => {
       setDriverReady(ready);
-      setDriverBundled(bundled);
+      setDriverMessage(message);
     }).catch((error) => setDriverMessage(`驱动状态检查失败：${String(error)}`));
   }, []);
 
@@ -431,25 +430,34 @@ export default function App() {
     }
   };
 
-  const doInstallDriver = async () => {
+  const doDownloadDriver = async () => {
     if (driverBusy || autoBusy) return;
     setDriverBusy(true);
-    setDriverMessage(driverBundled ? "正在请求管理员权限并安装驱动…" : "请选择完整的已签名驱动包…");
+    setDriverMessage("正在打开 libvirtualhid 官方安装包…");
     try {
-      const message = await installVhidDriver(driverBundled);
-      if (message === null) {
-        setDriverMessage("已取消选择驱动包");
-        return;
-      }
+      const message = await downloadVhidDriver();
       setDriverMessage(message);
       appendLog("ok", message);
-      const status = await vhidDriverStatus();
-      setDriverReady(status.ready);
-      setDriverBundled(status.bundled);
     } catch (error) {
-      const message = `驱动安装失败：${String(error)}`;
+      const message = `打开驱动下载失败：${String(error)}`;
       setDriverMessage(message);
       appendLog("err", message);
+    } finally {
+      setDriverBusy(false);
+    }
+  };
+
+  const doCheckDriver = async () => {
+    if (driverBusy || autoBusy) return;
+    setDriverBusy(true);
+    setDriverMessage("正在检查 libvirtualhid 驱动和许可证…");
+    try {
+      const status = await vhidDriverStatus();
+      setDriverReady(status.ready);
+      setDriverMessage(status.message);
+    } catch (error) {
+      setDriverReady(false);
+      setDriverMessage(`驱动检查失败：${String(error)}`);
     } finally {
       setDriverBusy(false);
     }
@@ -909,15 +917,17 @@ export default function App() {
               <>
                 <div className="btn-row">
                   <span className="track-meta">驱动：{driverReady ? "已就绪" : "未就绪"}</span>
-                  <button className="btn" onClick={() => void doInstallDriver()}
-                    disabled={!isDesktop() || driverBusy || autoBusy || driverReady}>
-                    {driverBusy ? "安装中…" : driverBundled ? "一键安装驱动" : "选择并安装驱动包…"}
+                  <button className="btn" onClick={() => void doDownloadDriver()}
+                    disabled={!isDesktop() || driverBusy || autoBusy}>
+                    下载官方驱动
+                  </button>
+                  <button className="btn" onClick={() => void doCheckDriver()}
+                    disabled={!isDesktop() || driverBusy || autoBusy}>
+                    {driverBusy ? "检查中…" : "检查驱动"}
                   </button>
                 </div>
                 <div className="track-meta" style={{ lineHeight: 1.5 }}>
-                  {driverMessage || (driverBundled
-                    ? "安装时 Windows 会请求一次管理员授权。"
-                    : "当前安装包未附带签名驱动；请选择包含 INF、SYS、CAT 的已签名驱动包。")}
+                  {driverMessage || "安装 libvirtualhid 官方 MSI 并激活许可证后，点击检查驱动。"}
                 </div>
               </>
             )}

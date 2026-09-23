@@ -12,8 +12,13 @@ use enigo::{Button, Direction, Enigo, Key, Keyboard, Mouse, Settings};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
 
-#[cfg(any(windows, test))]
+#[cfg(windows)]
 mod vhid;
+
+#[cfg(windows)]
+pub fn vhid_driver_probe(app: &AppHandle) -> Result<(), String> {
+    vhid::probe(app)
+}
 
 #[derive(Clone, Copy, Debug, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -180,7 +185,7 @@ fn play(
         PlaybackBackend::VirtualHid => {
             #[cfg(windows)]
             {
-                Output::VirtualHid(vhid::VhidOutput::open()?)
+                Output::VirtualHid(vhid::VhidOutput::open(app)?)
             }
             #[cfg(not(windows))]
             {
