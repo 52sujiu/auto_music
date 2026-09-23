@@ -348,6 +348,7 @@ export default function App() {
       startRef.current = performance.now();
       setPlaying(true);
       setPlayheadBoth(fromSec);
+      void signalGuide("play", fromSec, Date.now() + 80);
       if (fromSec <= 0.01) {
         appendLog(
           "ok",
@@ -522,7 +523,10 @@ export default function App() {
     await openGuideWindow();
     setGuideOn(true);
     // 新开的窗监听器还没注册，第一发 guide:state 会丢；补一发
-    setTimeout(syncGuide, 600);
+    setTimeout(() => {
+      syncGuide();
+      if (playing) void signalGuide("play", playheadRef.current);
+    }, 600);
     appendLog("ok", "引导窗已打开 —— 音符竖着落下，到红线时按提示的键。");
   };
 
@@ -535,7 +539,7 @@ export default function App() {
   // 不用 guideOn 守门：截图里出现过主窗 guideOn=false 但引导窗还开着，
   // 守门后 play 信号发不出去、引导窗永远 0.0s。emit 没人收也是安全的。
   useEffect(() => {
-    void signalGuide(playing ? "play" : "stop");
+    if (!playing) void signalGuide("stop");
   }, [playing]);
 
   // 主窗按 ESC 也能退出引导窗的穿透（穿透后引导窗收不到键盘）。

@@ -32,6 +32,13 @@ describe("引导练习判定", () => {
     expect(judge.press(input("M", false, true, true), 1)?.grade).toBe("perfect");
   });
 
+  it("中途开始不会把之前的音符记成 Miss", () => {
+    const judge = new GuideJudge([note(1), note(2)], 1);
+    judge.skipBefore(1.5);
+    expect(judge.expire(2.2).map((item) => item.index)).toEqual([1]);
+    expect(judge.snapshot()).toMatchObject({ miss: 1, judged: 1, score: -50 });
+  });
+
   it("调度延后音符时仍保留原音符的修饰键", () => {
     const events = [
       { t: 1, kind: "key" as const, key: "Z", down: true },

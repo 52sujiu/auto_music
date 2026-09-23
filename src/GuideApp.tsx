@@ -38,6 +38,7 @@ export default function GuideApp() {
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const startRef = useRef(0);
+  const fromRef = useRef(0);
   const rafRef = useRef(0);
   const stateRef = useRef<GuideState | null>(null);
   const speedRef = useRef(1);
@@ -60,16 +61,18 @@ export default function GuideApp() {
     setFeedback(null);
   };
 
-  const beginPractice = (nextSpeed: number) => {
+  const beginPractice = (nextSpeed: number, from = 0, startedAt = Date.now()) => {
     const actualSpeed = Math.max(0.1, nextSpeed || 1);
     speedRef.current = actualSpeed;
+    fromRef.current = from;
     judgeRef.current = new GuideJudge(stateRef.current?.notes ?? [], actualSpeed);
+    judgeRef.current.skipBefore(from);
     setScore(judgeRef.current.snapshot());
     setJudgeRevision((value) => value + 1);
     setFeedback(null);
-    startRef.current = performance.now();
+    startRef.current = performance.now() + startedAt - Date.now();
     setSpeedState(actualSpeed);
-    setT(0);
+    setT(from);
     playingRef.current = true;
     setPlaying(true);
   };
@@ -92,7 +95,7 @@ export default function GuideApp() {
 
   const processInput = (input: GuideInput) => {
     if (!playingRef.current || !judgeRef.current) return;
-    const time = ((performance.now() - startRef.current) / 1000) * speedRef.current;
+    const time = fromRef.current + Math.max(0, (performance.now() - startRef.current) / 1000) * speedRef.current;
     const expired = judgeRef.current.expire(time);
     const result = judgeRef.current.press(input, time);
     showJudgements(result ? [...expired, result] : expired);
@@ -126,7 +129,7 @@ export default function GuideApp() {
       );
       // 2) 播放/停止
       unlistens.push(
-        await listen<{ action: string; speed: number }>(
+        await listen<{ action: string; speed: number; from?: number; startedAt?: number }>(
           "guide:control",
           (e) => {
             if (e.payload.action === "play") {
@@ -134,7 +137,7 @@ export default function GuideApp() {
                 "auto-music:guide-speed",
                 String(e.payload.speed || 1),
               );
-              beginPractice(e.payload.speed || 1);
+              beginPractice(e.payload.speed || 1, e.payload.from || 0, e.payload.startedAt || Date.now());
             } else {
               stopPractice();
             }
@@ -169,7 +172,7 @@ export default function GuideApp() {
     if (!playing) return;
     const tick = () => {
       if (!playingRef.current) return;
-      const elapsed = ((performance.now() - startRef.current) / 1000) * speed;
+      const elapsed = fromRef.current + Math.max(0, (performance.now() - startRef.current) / 1000) * speed;
       setT(elapsed);
       if (judgeRef.current) showJudgements(judgeRef.current.expire(elapsed));
       if (state && elapsed > state.duration + 1) {

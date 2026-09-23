@@ -59,6 +59,14 @@ export class GuideJudge {
     return this.judged.has(index);
   }
 
+  /** 从中途开始练习时，之前的音符不算漏按。 */
+  skipBefore(time: number): void {
+    for (let index = 0; index < this.notes.length; index++) {
+      if (this.notes[index].t >= time) break;
+      this.judged.add(index);
+    }
+  }
+
   /** 超过 Great 窗口还没按下的音符逐个记 Miss。 */
   expire(time: number): GuideJudgement[] {
     const missed: GuideJudgement[] = [];

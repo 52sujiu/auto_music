@@ -77,11 +77,11 @@ export async function setGuideThrough(through: boolean): Promise<void> {
 }
 
 /** 让引导窗开始/停止跟着走。 */
-export async function signalGuide(action: "play" | "stop"): Promise<void> {
+export async function signalGuide(action: "play" | "stop", from = 0, startedAt = Date.now()): Promise<void> {
   if (!isDesktop()) return;
   const { emit } = await import("@tauri-apps/api/event");
   const speed =
     Number(localStorage.getItem("auto-music:guide-speed") ?? "1") || 1;
   // 全局广播：引导窗用 listen 收，没开窗时也安全
-  await emit("guide:control", { action, speed });
+  await emit("guide:control", { action, speed, from, startedAt });
 }
