@@ -168,6 +168,7 @@ export default function GuideApp() {
   useEffect(() => {
     if (!playing) return;
     const tick = () => {
+      if (!playingRef.current) return;
       const elapsed = ((performance.now() - startRef.current) / 1000) * speed;
       setT(elapsed);
       if (judgeRef.current) showJudgements(judgeRef.current.expire(elapsed));
@@ -408,7 +409,7 @@ export default function GuideApp() {
     }
     const { getCurrentWindow } = await import("@tauri-apps/api/window");
     const guide = getCurrentWindow();
-    await guide.setIgnoreCursorEvents(false);
+    try { await guide.setIgnoreCursorEvents(false); } catch { /* 关闭时仍继续 */ }
     await guide.close();
   };
 

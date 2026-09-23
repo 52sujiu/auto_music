@@ -20,7 +20,7 @@ impl GuideInputState {
 }
 
 #[cfg(windows)]
-#[derive(serde::Serialize)]
+#[derive(Clone, serde::Serialize)]
 struct GuideInput {
     key: &'static str,
     left: bool,
@@ -73,7 +73,7 @@ pub fn start_guide_input(
                             let _ = app.emit(
                                 "guide:input",
                                 GuideInput {
-                                    key,
+                                    key: *key,
                                     left,
                                     right,
                                     middle,
