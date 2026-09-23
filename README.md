@@ -12,6 +12,8 @@ Windows 发布版右上角有「检查更新」按钮：会检查 GitHub Release
 
 Windows 虚拟 HID 是软件设备，不会在 USB 总线上出现物理 USB 信号。应用安装包只附带基于 MIT 许可的 libvirtualhid 客户端桥接程序，不附带第三方驱动 MSI。LizardByte 驱动与许可证由用户从[官方发布页](https://github.com/LizardByte/libvirtualhid/releases/tag/v2026.914.1218.10)取得。本仓库当前在 macOS 环境开发，实际驱动加载与输入行为仍需在 Windows 上验证。
 
+默认安装路径下，可用 `C:\Program Files\libvirtualhid\tools\windows\virtualhid_control.exe` 打开 LizardByte 的控制程序并激活许可证。完成后回到 Auto Music 点「检查驱动」；如果仍显示未就绪，先重启 Windows，再检查控制程序中的授权状态。
+
 引导练习窗右上角可关闭；练习时按音键和相应鼠标修饰键，按键时间误差不超过 70 毫秒记 Perfect（+100），不超过 160 毫秒记 Great（+50），错误键、错误修饰或逾期记 Miss（−50）。Windows 桌面版会在引导窗打开时读取全局按键状态；其他平台只在引导窗获得焦点时计分。自动演奏期间不计玩家按键分数。
 
 目标程序是否接收系统模拟输入取决于它的输入方式与规则；本功能不能保证绕过检测。

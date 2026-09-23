@@ -69,7 +69,7 @@ pub fn download_vhid_driver() -> Result<String, String> {
                 result as usize
             ));
         }
-        Ok("已打开 libvirtualhid 官方 MSI 下载链接；安装后请激活许可证，再点“检查驱动”".into())
+        Ok("已打开 libvirtualhid 官方 MSI 下载链接；安装后请用 virtualhid_control.exe 激活许可证，再点“检查驱动”".into())
     }
     #[cfg(not(windows))]
     {
