@@ -39,6 +39,20 @@ fn bridge_response(line: &str) -> Result<(), String> {
 }
 
 #[cfg(windows)]
+fn driver_service_running() -> Option<bool> {
+    // sc.exe exit 0 + RUNNING means the filter driver is live.
+    // Missing service or stopped state means install pending reboot.
+    let output = Command::new("sc.exe")
+        .args(["query", "interception"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return Some(false);
+    }
+    Some(String::from_utf8_lossy(&output.stdout).contains("RUNNING"))
+}
+
+#[cfg(windows)]
 pub fn probe(app: &AppHandle) -> Result<(), String> {
     let output = Command::new(bridge_path(app)?)
         .arg("--probe")
@@ -48,6 +62,13 @@ pub fn probe(app: &AppHandle) -> Result<(), String> {
     bridge_response(message.lines().next().unwrap_or(""))?;
     if !output.status.success() {
         return Err("Interception 驱动检查失败".into());
+    }
+    // Bridge context can be created even when the filter driver is not
+    // active yet (fresh install, reboot pending). Refuse false-ready.
+    if driver_service_running() == Some(false) {
+        return Err(
+            "Interception 驱动未运行：刚安装请重启 Windows 后再检查".into(),
+        );
     }
     Ok(())
 }

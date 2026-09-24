@@ -163,8 +163,12 @@ int main(int argc, char **argv) {
       error("unsupported input kind");
       continue;
     }
-    if (ok) std::cout << "OK" << std::endl;
-    else error("Interception 发送失败，检查驱动是否已安装并重启");
+    if (ok) {
+      std::cout << "OK" << std::endl;
+    } else {
+      DWORD code = GetLastError();
+      error("Interception 发送失败(本机错误码 " + std::to_string(code) + ")，刚安装请重启后再试");
+    }
   }
   api.destroy(ctx);
   return 0;
