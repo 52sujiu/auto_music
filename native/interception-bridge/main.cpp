@@ -15,17 +15,42 @@ using CreateFn = Context (*)();
 using DestroyFn = void (*)(Context);
 using SetFilterFn = void (*)(Context, Predicate, unsigned short);
 using SendFn = int (*)(Context, Device, const void *, unsigned int);
+using GetHwIdFn = unsigned int (*)(Context, Device, void *, unsigned int);
 
 struct Api {
   HMODULE dll = nullptr;
   CreateFn create = nullptr;
   DestroyFn destroy = nullptr;
   SendFn send = nullptr;
+  GetHwIdFn get_hwid = nullptr;  // optional, for device enumeration
 };
 
-// Keyboard(0)=1, Mouse(0)=11 per interception.h convention.
-constexpr Device kKeyboard = 1;
-constexpr Device kMouse = 11;
+// Device convention per interception.h: keyboards 1..10, mice 11..20.
+// Never hardcode 1/11: laptops/RDP may expose different slots, so enumerate.
+constexpr Device kKeyboardBase = 1;
+constexpr Device kMouseBase = 11;
+constexpr int kMaxEach = 10;
+
+bool device_exists(Api &api, Context ctx, Device dev) {
+  if (!api.get_hwid) return true;  // old dll, assume present
+  wchar_t buf[256];
+  return api.get_hwid(ctx, dev, buf, sizeof(buf)) > 0;
+}
+
+bool find_devices(Api &api, Context ctx, Device &keyboard, Device &mouse) {
+  keyboard = 0;
+  mouse = 0;
+  for (int i = 0; i < kMaxEach; ++i) {
+    if (!keyboard && device_exists(api, ctx, kKeyboardBase + i)) keyboard = kKeyboardBase + i;
+    if (!mouse && device_exists(api, ctx, kMouseBase + i)) mouse = kMouseBase + i;
+    if (keyboard && mouse) break;
+  }
+  if (!api.get_hwid) {
+    keyboard = kKeyboardBase;
+    mouse = kMouseBase;
+  }
+  return keyboard != 0 && mouse != 0;
+}
 constexpr unsigned short kKeyDown = 0x00;
 constexpr unsigned short kKeyUp = 0x01;
 constexpr unsigned short kMouseLeftDown = 0x001;
@@ -86,6 +111,8 @@ bool load_api(Api &api) {
   api.create = reinterpret_cast<CreateFn>(GetProcAddress(api.dll, "interception_create_context"));
   api.destroy = reinterpret_cast<DestroyFn>(GetProcAddress(api.dll, "interception_destroy_context"));
   api.send = reinterpret_cast<SendFn>(GetProcAddress(api.dll, "interception_send"));
+  api.get_hwid =
+      reinterpret_cast<GetHwIdFn>(GetProcAddress(api.dll, "interception_get_hardware_id"));
   return api.create && api.destroy && api.send;
 }
 
@@ -128,6 +155,16 @@ int main(int argc, char **argv) {
     error("Interception 驱动未就绪，请用管理员运行 Install-interception.exe /install 后重启");
     return 1;
   }
+  Device keyboard = 0, mouse = 0;
+  if (!find_devices(api, ctx, keyboard, mouse)) {
+    std::string what;
+    if (!keyboard && !mouse) what = "键盘和鼠标";
+    else if (!keyboard) what = "键盘";
+    else what = "鼠标";
+    error("本机没有可用的 Interception " + what + "设备(触控板/远控会话可能无鼠标栈)，键盘可用时切系统模拟输入");
+    api.destroy(ctx);
+    return 1;
+  }
   std::cout << "READY" << std::endl;
   if (std::string(argv[1]) == "--probe") {
     api.destroy(ctx);
@@ -150,7 +187,7 @@ int main(int argc, char **argv) {
         continue;
       }
       KeyStroke stroke{code, static_cast<unsigned short>(down ? kKeyDown : kKeyUp), 0};
-      ok = api.send(ctx, kKeyboard, &stroke, 1) > 0;
+      ok = api.send(ctx, keyboard, &stroke, 1) > 0;
     } else if (kind == 'M') {
       unsigned short state = 0;
       if (!mouse_state(value, down == 1, state)) {
@@ -158,7 +195,7 @@ int main(int argc, char **argv) {
         continue;
       }
       MouseStroke stroke{state, 0, 0, 0, 0, 0};
-      ok = api.send(ctx, kMouse, &stroke, 1) > 0;
+      ok = api.send(ctx, mouse, &stroke, 1) > 0;
     } else {
       error("unsupported input kind");
       continue;
