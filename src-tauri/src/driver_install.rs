@@ -158,7 +158,7 @@ if(!$dllSrc){throw 'dll not found after expand'}
 New-Item -ItemType Directory -Path (Split-Path $dllFixed) -Force|Out-Null;
 Copy-Item $dllSrc.FullName -Destination $dllFixed -Force;
 try{New-Item -ItemType Directory -Path '__DRV__' -Force|Out-Null;Copy-Item $dllSrc.FullName -Destination '__DRV__\interception.dll' -Force}catch{};
-try{$pr=Start-Process -FilePath $inst.FullName -ArgumentList '/install' -Verb RunAs -Wait -PassThru;if($pr.ExitCode -ne 0){throw ('installer:'+$pr.ExitCode)}}catch{throw ('need admin:'+$_.Exception.Message)};
+$instDir=Split-Path $inst.FullName;$code=0;$cancelled=$false;try{$pr=Start-Process -FilePath $inst.FullName -ArgumentList '/install' -WorkingDirectory $instDir -Verb RunAs -Wait -PassThru;$code=$pr.ExitCode}catch{$cancelled=$true;$cancelMsg=$_.Exception.Message};$drvPresent=(Test-Path 'C:\Windows\System32\drivers\interception.sys') -or (Test-Path 'C:\Windows\Sysnative\drivers\interception.sys') -or (Get-Service interception -ErrorAction SilentlyContinue) -or (Test-Path 'HKLM:\SYSTEM\CurrentControlSet\Services\interception');if($cancelled -and !$drvPresent){throw ('admin required:'+$cancelMsg)};if($drvPresent){'INTERCEPTION_INSTALL_OK:'+$dllFixed;return};if($code -ne 0){throw ('installer exit:'+$code+'. driver not detected; try reboot, or admin cmd in installer folder: install-interception.exe /install')};
 'INTERCEPTION_INSTALL_OK:'+$dllFixed"#;
     let ps = template
         .replace("__URL__", url)
