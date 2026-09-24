@@ -142,29 +142,29 @@ fn install_interception(driver_dir: &std::path::Path) -> Result<String, String> 
     use std::process::Command;
     let url = INTERCEPTION_URL;
     let driver_dir_str = driver_dir.to_string_lossy().replace('"', "");
-    // One click: download zip to TEMP, expand, best-effort copy dll next to bridge,
-    // then elevate only the official installer. DLL also loads from TEMP, no admin needed.
-    let ps = format!(
-        "$ErrorActionPreference='Stop';"
-        "$base=Join-Path $env:TEMP 'auto-music-interception';"
-        "$zip=Join-Path $base 'Interception.zip';"
-        "$dir=Join-Path $base 'Interception';"
-        "New-Item -ItemType Directory -Path $base -Force|Out-Null;"
-        "if(!(Test-Path $zip)){{[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12;"
-        "Invoke-WebRequest -Uri '{url}' -OutFile $zip -UseBasicParsing}};"
-        "if(!(Test-Path (Join-Path $dir 'Install-interception.exe'))){{"
-        "Expand-Archive -Path $zip -DestinationPath $dir -Force}};"
-        "$dll=Join-Path $dir 'x64\\interception.dll';"
-        "try{{New-Item -ItemType Directory -Path '{drv}' -Force|Out-Null;"
-        "Copy-Item $dll -Destination '{drv}\\interception.dll' -Force}}catch{{}};"
-        "$inst=Join-Path $dir 'Install-interception.exe';"
-        "try{{$p=Start-Process -FilePath $inst -ArgumentList '/install' -Verb RunAs -Wait -PassThru;"
-        "if($p.ExitCode -ne 0){{throw "安装程序返回 "+$p.ExitCode}}}}"
-        "catch{{throw '安装需要管理员确认:'+$_.Exception.Message}};"
-        "'INTERCEPTION_INSTALL_OK:'+$dll",
-        url = url,
-        drv = driver_dir_str,
-    );
+    let template = r#"PS_TEMPLATE
+$ErrorActionPreference='Stop';
+$base=Join-Path $env:TEMP 'auto-music-interception';
+$zip=Join-Path $base 'Interception.zip';
+$dir=Join-Path $base 'Interception';
+$dllFixed=Join-Path $base 'dll\interception.dll';
+New-Item -ItemType Directory -Path $base -Force|Out-Null;
+if(!(Test-Path $zip)){[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12;Invoke-WebRequest -Uri '__URL__' -OutFile $zip -UseBasicParsing}
+$inst=Get-ChildItem -Path $dir -Filter install-interception.exe -Recurse -ErrorAction SilentlyContinue|Select-Object -First 1;
+$dllSrc=Get-ChildItem -Path $dir -Filter interception.dll -Recurse -ErrorAction SilentlyContinue|Where-Object{$_.FullName -match 'x64'}|Select-Object -First 1;
+if(!$dllSrc){$dllSrc=Get-ChildItem -Path $dir -Filter interception.dll -Recurse -ErrorAction SilentlyContinue|Select-Object -First 1}
+if(!$inst -or !$dllSrc){Expand-Archive -Path $zip -DestinationPath $dir -Force;$inst=Get-ChildItem -Path $dir -Filter install-interception.exe -Recurse|Select-Object -First 1;$dllSrc=Get-ChildItem -Path $dir -Filter interception.dll -Recurse|Where-Object{$_.FullName -match 'x64'}|Select-Object -First 1;if(!$dllSrc){$dllSrc=Get-ChildItem -Path $dir -Filter interception.dll -Recurse|Select-Object -First 1}}
+if(!$inst){throw 'installer not found after expand'}
+if(!$dllSrc){throw 'dll not found after expand'}
+New-Item -ItemType Directory -Path (Split-Path $dllFixed) -Force|Out-Null;
+Copy-Item $dllSrc.FullName -Destination $dllFixed -Force;
+try{New-Item -ItemType Directory -Path '__DRV__' -Force|Out-Null;Copy-Item $dllSrc.FullName -Destination '__DRV__\interception.dll' -Force}catch{};
+try{$pr=Start-Process -FilePath $inst.FullName -ArgumentList '/install' -Verb RunAs -Wait -PassThru;if($pr.ExitCode -ne 0){throw ('installer:'+$pr.ExitCode)}}catch{throw ('need admin:'+$_.Exception.Message)};
+'INTERCEPTION_INSTALL_OK:'+$dllFixed
+PS_TEMPLATE"#;
+    let ps = template
+        .replace("__URL__", url)
+        .replace("__DRV__", &driver_dir_str);
     let output = Command::new("powershell.exe")
         .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", &ps])
         .output()

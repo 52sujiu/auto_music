@@ -61,15 +61,20 @@ HMODULE load_from_own_dir() {
     std::wstring dll = (sep == std::wstring::npos ? L"interception.dll" : full.substr(0, sep + 1) + L"interception.dll");
     if (HMODULE h = LoadLibraryW(dll.c_str())) return h;
   }
-  // User-mode auto-install location, no admin needed for the DLL itself.
+  // User-mode auto-install locations, no admin needed for the DLL itself.
+  const wchar_t *cands[] = {
+      L"\\auto-music-interception\\dll\\interception.dll",
+      L"\\auto-music-interception\\Interception\\Interception\\library\\x64\\interception.dll",
+      L"\\auto-music-interception\\Interception\\library\\x64\\interception.dll",
+  };
   wchar_t temp[MAX_PATH];
-  if (GetEnvironmentVariableW(L"TEMP", temp, MAX_PATH)) {
-    std::wstring dll = std::wstring(temp) + L"\\auto-music-interception\\Interception\\x64\\interception.dll";
-    if (HMODULE h = LoadLibraryW(dll.c_str())) return h;
-  }
-  if (GetEnvironmentVariableW(L"TMP", temp, MAX_PATH)) {
-    std::wstring dll = std::wstring(temp) + L"\\auto-music-interception\\Interception\\x64\\interception.dll";
-    if (HMODULE h = LoadLibraryW(dll.c_str())) return h;
+  const wchar_t *envs[] = {L"TEMP", L"TMP"};
+  for (const wchar_t *env : envs) {
+    if (!GetEnvironmentVariableW(env, temp, MAX_PATH)) continue;
+    for (const wchar_t *rel : cands) {
+      std::wstring dll = std::wstring(temp) + rel;
+      if (HMODULE h = LoadLibraryW(dll.c_str())) return h;
+    }
   }
   return nullptr;
 }
@@ -115,7 +120,7 @@ int main(int argc, char **argv) {
   }
   Api api;
   if (!load_api(api)) {
-    error("找不到 interception.dll，请先安装 Interception 驱动并把 x64/interception.dll 放到程序 driver 目录");
+    error("找不到 interception.dll，点“一键安装驱动”自动下载安装，装完重启再检查");
     return 1;
   }
   Context ctx = api.create();
