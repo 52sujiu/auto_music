@@ -436,7 +436,7 @@ export default function App() {
     setDriverMessage(
       playbackBackend === "virtual-hid"
         ? "正在打开 libvirtualhid 官方安装包…"
-        : "正在打开 Interception 官方安装包…",
+        : "正在自动下载安装 Interception（只需点一次，会弹管理员确认）…",
     );
     try {
       const message = await (playbackBackend === "virtual-hid"
@@ -445,7 +445,7 @@ export default function App() {
       setDriverMessage(message);
       appendLog("ok", message);
     } catch (error) {
-      const message = `打开驱动下载失败：${String(error)}`;
+      const message = `驱动自动安装失败：${String(error)}`;
       setDriverMessage(message);
       appendLog("err", message);
     } finally {
@@ -466,6 +466,22 @@ export default function App() {
         ? vhidDriverStatus()
         : interceptionDriverStatus());
       setDriverReady(status.ready);
+      if (!status.ready && playbackBackend === "interception") {
+        setDriverMessage(`${status.message}；正在自动下载安装，重试中…`);
+        try {
+          const installed = await downloadInterceptionDriver();
+          appendLog("ok", installed);
+        } catch (error) {
+          setDriverMessage(`自动安装失败：${String(error)}；可点“一键安装驱动”重试`);
+          return;
+        }
+        const retry = await interceptionDriverStatus();
+        setDriverReady(retry.ready);
+        setDriverMessage(
+          retry.ready ? retry.message : `${retry.message}；已自动安装，重启 Windows 后再点检查`,
+        );
+        return;
+      }
       setDriverMessage(status.message);
     } catch (error) {
       setDriverReady(false);
@@ -926,13 +942,13 @@ export default function App() {
                 </select>
               </div>
             )}
-            {/Windows/i.test(navigator.userAgent) && playbackBackend === "virtual-hid" && (
+            {/Windows/i.test(navigator.userAgent) && playbackBackend !== "system" && (
               <>
                 <div className="btn-row">
                   <span className="track-meta">驱动：{driverReady ? "已就绪" : "未就绪"}</span>
                   <button className="btn" onClick={() => void doDownloadDriver()}
                     disabled={!isDesktop() || driverBusy || autoBusy}>
-                    下载官方驱动
+                    {playbackBackend === "virtual-hid" ? "下载官方驱动" : "一键安装驱动"}
                   </button>
                   <button className="btn" onClick={() => void doCheckDriver()}
                     disabled={!isDesktop() || driverBusy || autoBusy}>
@@ -943,7 +959,7 @@ export default function App() {
                   {driverMessage ||
                     (playbackBackend === "virtual-hid"
                       ? "安装 libvirtualhid 官方 MSI 并激活许可证后，点击检查驱动。"
-                      : "解压 Interception 官方 zip，管理员运行 Install-interception.exe /install 并重启后，点击检查驱动；再把 x64/interception.dll 放到程序 driver 目录同名位置。")}
+                      : "点“检查驱动”，没装会自动下载安装（弹一次管理员确认），装完重启再检查即可，不用自己找包。")}
                 </div>
               </>
             )}

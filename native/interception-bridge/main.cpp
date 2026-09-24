@@ -55,11 +55,23 @@ void error(const std::string &message) { std::cout << "ERR " << message << std::
 
 HMODULE load_from_own_dir() {
   wchar_t path[MAX_PATH];
-  if (!GetModuleFileNameW(nullptr, path, MAX_PATH)) return nullptr;
-  std::wstring full(path);
-  auto sep = full.find_last_of(L"\\/");
-  std::wstring dll = (sep == std::wstring::npos ? L"interception.dll" : full.substr(0, sep + 1) + L"interception.dll");
-  return LoadLibraryW(dll.c_str());
+  if (GetModuleFileNameW(nullptr, path, MAX_PATH)) {
+    std::wstring full(path);
+    auto sep = full.find_last_of(L"\\/");
+    std::wstring dll = (sep == std::wstring::npos ? L"interception.dll" : full.substr(0, sep + 1) + L"interception.dll");
+    if (HMODULE h = LoadLibraryW(dll.c_str())) return h;
+  }
+  // User-mode auto-install location, no admin needed for the DLL itself.
+  wchar_t temp[MAX_PATH];
+  if (GetEnvironmentVariableW(L"TEMP", temp, MAX_PATH)) {
+    std::wstring dll = std::wstring(temp) + L"\\auto-music-interception\\Interception\\x64\\interception.dll";
+    if (HMODULE h = LoadLibraryW(dll.c_str())) return h;
+  }
+  if (GetEnvironmentVariableW(L"TMP", temp, MAX_PATH)) {
+    std::wstring dll = std::wstring(temp) + L"\\auto-music-interception\\Interception\\x64\\interception.dll";
+    if (HMODULE h = LoadLibraryW(dll.c_str())) return h;
+  }
+  return nullptr;
 }
 
 bool load_api(Api &api) {
