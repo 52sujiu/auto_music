@@ -6,7 +6,7 @@ export type AutoPlaybackStatus = {
   message: string;
 };
 
-export type PlaybackBackend = "system" | "virtual-hid";
+export type PlaybackBackend = "system" | "virtual-hid" | "interception";
 
 export async function listenAutoPlayback(
   callback: (status: AutoPlaybackStatus) => void,

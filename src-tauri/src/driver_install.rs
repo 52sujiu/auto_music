@@ -1,9 +1,12 @@
-//! Opens LizardByte's official driver installer. The MSI is not redistributed.
+//! Driver downloads are not redistributed; the app opens official releases.
 
 use serde::Serialize;
 
 #[cfg(windows)]
 const INSTALLER_URL: &str = "https://github.com/LizardByte/libvirtualhid/releases/download/v2026.914.1218.10/libvirtualhid-Windows-AMD64-driver-installer.msi";
+#[cfg(windows)]
+const INTERCEPTION_URL: &str =
+    "https://github.com/oblitum/Interception/releases/download/v1.0.1/Interception.zip";
 
 #[derive(Serialize)]
 pub struct DriverStatus {
@@ -70,6 +73,73 @@ pub fn download_vhid_driver() -> Result<String, String> {
             ));
         }
         Ok("已打开 libvirtualhid 官方 MSI 下载链接；安装后请用 virtualhid_control.exe 激活许可证，再点“检查驱动”".into())
+    }
+    #[cfg(not(windows))]
+    {
+        Err("驱动安装仅支持 Windows".into())
+    }
+}
+
+#[tauri::command]
+pub async fn interception_driver_status(app: tauri::AppHandle) -> DriverStatus {
+    #[cfg(windows)]
+    {
+        let result = tauri::async_runtime::spawn_blocking(move || {
+            crate::playback::interception_driver_probe(&app)
+        })
+        .await;
+        match result {
+            Ok(Ok(())) => DriverStatus {
+                ready: true,
+                message: "Interception 键盘和鼠标已就绪".into(),
+            },
+            Ok(Err(message)) => DriverStatus {
+                ready: false,
+                message,
+            },
+            Err(error) => DriverStatus {
+                ready: false,
+                message: format!("驱动检查失败：{error}"),
+            },
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = app;
+        DriverStatus {
+            ready: false,
+            message: "Interception 仅支持 Windows".into(),
+        }
+    }
+}
+
+#[tauri::command]
+pub fn download_interception_driver() -> Result<String, String> {
+    #[cfg(windows)]
+    {
+        use std::{iter, os::windows::ffi::OsStrExt};
+        use windows_sys::Win32::UI::Shell::ShellExecuteW;
+        let url: Vec<u16> = std::ffi::OsStr::new(INTERCEPTION_URL)
+            .encode_wide()
+            .chain(iter::once(0))
+            .collect();
+        let result = unsafe {
+            ShellExecuteW(
+                std::ptr::null_mut(),
+                std::ptr::null(),
+                url.as_ptr(),
+                std::ptr::null(),
+                std::ptr::null(),
+                1,
+            )
+        };
+        if result as usize <= 32 {
+            return Err(format!(
+                "无法打开官方安装包下载链接：错误码 {}",
+                result as usize
+            ));
+        }
+        Ok("已打开 Interception 官方 zip；解压后用管理员运行 Install-interception.exe /install，重启后再点“检查驱动”".into())
     }
     #[cfg(not(windows))]
     {

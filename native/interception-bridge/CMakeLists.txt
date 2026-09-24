@@ -1,0 +1,7 @@
+cmake_minimum_required(VERSION 3.24)
+project(auto_music_interception_bridge LANGUAGES CXX)
+add_executable(auto-music-interception-bridge main.cpp)
+target_compile_features(auto-music-interception-bridge PRIVATE cxx_std_17)
+if(MSVC)
+  set_property(TARGET auto-music-interception-bridge PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()

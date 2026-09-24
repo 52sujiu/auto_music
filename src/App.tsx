@@ -27,7 +27,7 @@ import {
 } from "./core/desktop-playback";
 import { isDesktop, saveTextFile } from "./core/save";
 import { installAvailableUpdate } from "./core/updater";
-import { downloadVhidDriver, vhidDriverStatus } from "./core/vhid-driver";
+import { downloadInterceptionDriver, downloadVhidDriver, interceptionDriverStatus, vhidDriverStatus } from "./core/vhid-driver";
 import {
   LIBRARY,
   groupByComposer,
@@ -74,7 +74,7 @@ export default function App() {
   const [updateBusy, setUpdateBusy] = useState(false);
   const [updateMessage, setUpdateMessage] = useState("");
   const [playbackBackend, setPlaybackBackend] = useState<PlaybackBackend>(
-    () => /Windows/i.test(navigator.userAgent) ? "virtual-hid" : "system",
+    () => /Windows/i.test(navigator.userAgent) ? "interception" : "system",
   );
   const [trimLead, setTrimLead] = useState(true);
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -95,7 +95,7 @@ export default function App() {
 
   useEffect(() => {
     if (!isDesktop() || !/Windows/i.test(navigator.userAgent)) return;
-    void vhidDriverStatus().then(({ ready, message }) => {
+    void interceptionDriverStatus().then(({ ready, message }) => {
       setDriverReady(ready);
       setDriverMessage(message);
     }).catch((error) => setDriverMessage(`驱动状态检查失败：${String(error)}`));
@@ -433,9 +433,15 @@ export default function App() {
   const doDownloadDriver = async () => {
     if (driverBusy || autoBusy) return;
     setDriverBusy(true);
-    setDriverMessage("正在打开 libvirtualhid 官方安装包…");
+    setDriverMessage(
+      playbackBackend === "virtual-hid"
+        ? "正在打开 libvirtualhid 官方安装包…"
+        : "正在打开 Interception 官方安装包…",
+    );
     try {
-      const message = await downloadVhidDriver();
+      const message = await (playbackBackend === "virtual-hid"
+        ? downloadVhidDriver()
+        : downloadInterceptionDriver());
       setDriverMessage(message);
       appendLog("ok", message);
     } catch (error) {
@@ -450,9 +456,15 @@ export default function App() {
   const doCheckDriver = async () => {
     if (driverBusy || autoBusy) return;
     setDriverBusy(true);
-    setDriverMessage("正在检查 libvirtualhid 驱动和许可证…");
+    setDriverMessage(
+      playbackBackend === "virtual-hid"
+        ? "正在检查 libvirtualhid 驱动和许可证…"
+        : "正在检查 Interception 驱动…",
+    );
     try {
-      const status = await vhidDriverStatus();
+      const status = await (playbackBackend === "virtual-hid"
+        ? vhidDriverStatus()
+        : interceptionDriverStatus());
       setDriverReady(status.ready);
       setDriverMessage(status.message);
     } catch (error) {
@@ -908,7 +920,8 @@ export default function App() {
                 <select className="select" id="playback-backend" value={playbackBackend}
                   onChange={(event) => setPlaybackBackend(event.target.value as PlaybackBackend)}
                   disabled={autoBusy}>
-                  <option value="virtual-hid">虚拟 HID</option>
+                  <option value="interception">Interception（免费）</option>
+                  <option value="virtual-hid">虚拟 HID（付费）</option>
                   <option value="system">系统模拟输入</option>
                 </select>
               </div>
@@ -927,7 +940,10 @@ export default function App() {
                   </button>
                 </div>
                 <div className="track-meta" style={{ lineHeight: 1.5 }}>
-                  {driverMessage || "安装 libvirtualhid 官方 MSI 并激活许可证后，点击检查驱动。"}
+                  {driverMessage ||
+                    (playbackBackend === "virtual-hid"
+                      ? "安装 libvirtualhid 官方 MSI 并激活许可证后，点击检查驱动。"
+                      : "解压 Interception 官方 zip，管理员运行 Install-interception.exe /install 并重启后，点击检查驱动；再把 x64/interception.dll 放到程序 driver 目录同名位置。")}
                 </div>
               </>
             )}

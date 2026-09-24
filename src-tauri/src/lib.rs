@@ -64,7 +64,9 @@ pub fn run() {
             playback::stop_playback,
             guide_input::start_guide_input,
             driver_install::vhid_driver_status,
-            driver_install::download_vhid_driver
+            driver_install::download_vhid_driver,
+            driver_install::interception_driver_status,
+            driver_install::download_interception_driver
         ])
         .run(tauri::generate_context!())
         .expect("启动 Tauri 应用失败");

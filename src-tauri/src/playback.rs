@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
 
 #[cfg(windows)]
+mod interception;
 mod vhid;
 
 #[cfg(windows)]
@@ -20,11 +21,17 @@ pub fn vhid_driver_probe(app: &AppHandle) -> Result<(), String> {
     vhid::probe(app)
 }
 
+#[cfg(windows)]
+pub fn interception_driver_probe(app: &AppHandle) -> Result<(), String> {
+    interception::probe(app)
+}
+
 #[derive(Clone, Copy, Debug, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum PlaybackBackend {
     System,
     VirtualHid,
+    Interception,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq)]
@@ -176,6 +183,8 @@ fn play(
         System(Enigo),
         #[cfg(windows)]
         VirtualHid(vhid::VhidOutput),
+        #[cfg(windows)]
+        Interception(interception::InterceptionOutput),
     }
     let mut output = match backend {
         PlaybackBackend::System => Output::System(
@@ -192,11 +201,23 @@ fn play(
                 return Err("虚拟 HID 仅支持 Windows".into());
             }
         }
+        PlaybackBackend::Interception => {
+            #[cfg(windows)]
+            {
+                Output::Interception(interception::InterceptionOutput::open(app)?)
+            }
+            #[cfg(not(windows))]
+            {
+                return Err("Interception 仅支持 Windows".into());
+            }
+        }
     };
     let mut send_output = |input, down| match &mut output {
         Output::System(enigo) => send(enigo, input, down),
         #[cfg(windows)]
         Output::VirtualHid(device) => device.send(input, down),
+        #[cfg(windows)]
+        Output::Interception(device) => device.send(input, down),
     };
     emit_status(
         app,

@@ -14,3 +14,15 @@ export async function downloadVhidDriver(): Promise<string> {
   const { invoke } = await import("@tauri-apps/api/core");
   return invoke<string>("download_vhid_driver");
 }
+
+export async function interceptionDriverStatus(): Promise<VhidDriverStatus> {
+  if (!isDesktop()) return { ready: false, message: "驱动检查仅支持桌面版" };
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<VhidDriverStatus>("interception_driver_status");
+}
+
+export async function downloadInterceptionDriver(): Promise<string> {
+  if (!isDesktop()) throw new Error("驱动下载仅支持桌面版");
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<string>("download_interception_driver");
+}
