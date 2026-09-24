@@ -1,6 +1,6 @@
 [package]
 name = "auto-music"
-version = "0.1.8"
+version = "0.1.9"
 description = "Auto Music 口琴谱面工坊"
 authors = ["you"]
 edition = "2021"

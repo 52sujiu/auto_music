@@ -142,8 +142,7 @@ fn install_interception(driver_dir: &std::path::Path) -> Result<String, String> 
     use std::process::Command;
     let url = INTERCEPTION_URL;
     let driver_dir_str = driver_dir.to_string_lossy().replace('"', "");
-    let template = r#"PS_TEMPLATE
-$ErrorActionPreference='Stop';
+    let template = r#"chcp 65001|Out-Null;$ErrorActionPreference='Stop';
 $base=Join-Path $env:TEMP 'auto-music-interception';
 $zip=Join-Path $base 'Interception.zip';
 $dir=Join-Path $base 'Interception';
@@ -160,8 +159,7 @@ New-Item -ItemType Directory -Path (Split-Path $dllFixed) -Force|Out-Null;
 Copy-Item $dllSrc.FullName -Destination $dllFixed -Force;
 try{New-Item -ItemType Directory -Path '__DRV__' -Force|Out-Null;Copy-Item $dllSrc.FullName -Destination '__DRV__\interception.dll' -Force}catch{};
 try{$pr=Start-Process -FilePath $inst.FullName -ArgumentList '/install' -Verb RunAs -Wait -PassThru;if($pr.ExitCode -ne 0){throw ('installer:'+$pr.ExitCode)}}catch{throw ('need admin:'+$_.Exception.Message)};
-'INTERCEPTION_INSTALL_OK:'+$dllFixed
-PS_TEMPLATE"#;
+'INTERCEPTION_INSTALL_OK:'+$dllFixed"#;
     let ps = template
         .replace("__URL__", url)
         .replace("__DRV__", &driver_dir_str);
